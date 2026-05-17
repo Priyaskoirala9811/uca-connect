@@ -10,7 +10,7 @@ import FilterSidebar from './FilterSidebar';
 import UserCardGrid from './UserCardGrid';
 import ProfileDrawer from './ProfileDrawer';
 import InviteModal from './InviteModal';
-import ChatModal from './chatmodal';
+import ChatModal from './chatModal';
 
 export interface UserProfile {
   id: string;

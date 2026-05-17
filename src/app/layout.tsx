@@ -1,8 +1,7 @@
 import React from 'react';
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'sonner';
-declare module '*.css';
-import '../styles/tailwind.css';
+import '../styles/index.css';
 
 export const viewport: Viewport = {
   width: 'device-width',
