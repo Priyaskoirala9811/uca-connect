@@ -11,6 +11,8 @@ interface TaskCardProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   onMove: (taskId: string, newStatus: 'todo' | 'inprogress' | 'done') => void;
+  onEdit: (task: FirestoreTask) => void;
+  onDelete: (taskId: string) => void;
   columns: { id: 'todo' | 'inprogress' | 'done'; label: string }[];
 }
 
@@ -20,8 +22,8 @@ const PRIORITY_CONFIG = {
   low: { label: 'Low', bg: '#F1F5F9', color: '#475569', dot: '#94A3B8' },
 };
 
-export default function TaskCard({ task, assignee, isExpanded, onToggleExpand, onMove, columns }: TaskCardProps) {
-  const [showMoveMenu, setShowMoveMenu] = useState(false);
+export default function TaskCard({ task, assignee, isExpanded, onToggleExpand, onMove, onEdit, onDelete, columns }: TaskCardProps) {
+  const [showMenu, setShowMenu] = useState(false);
   const priority = PRIORITY_CONFIG[task.priority];
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done';
   const otherColumns = columns.filter((c) => c.id !== task.status);
@@ -42,33 +44,49 @@ export default function TaskCard({ task, assignee, isExpanded, onToggleExpand, o
           </p>
           <div className="relative flex-shrink-0">
             <button
-              onClick={() => setShowMoveMenu(!showMoveMenu)}
+              onClick={() => setShowMenu(!showMenu)}
               className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
-              title="Move to column"
+              title="Task options"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B87A0" strokeWidth="2">
-                <path d="M5 12h14M12 5l7 7-7 7" />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B87A0" strokeWidth="2">
+                <circle cx="12" cy="5" r="1.5" />
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="12" cy="19" r="1.5" />
               </svg>
             </button>
-            {showMoveMenu && (
-              <div className="absolute right-0 top-7 z-20 rounded-xl border shadow-dropdown bg-white py-1 min-w-[140px] animate-slide-up" style={{ borderColor: '#E8E6F0' }}>
+            {showMenu && (
+              <div className="absolute right-0 top-7 z-20 rounded-xl border shadow-dropdown bg-white py-1 min-w-[150px] animate-slide-up" style={{ borderColor: '#E8E6F0' }}>
+                <button
+                  onClick={() => { setShowMenu(false); onEdit(task); }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors"
+                  style={{ color: '#4A4665' }}
+                >
+                  ✏️ Edit task
+                </button>
                 {otherColumns.map((col) => (
                   <button
                     key={`move-${task.id}-${col.id}`}
-                    onClick={() => { onMove(task.id, col.id); setShowMoveMenu(false); toast.success(`Moved to ${col.label}`); }}
+                    onClick={() => { onMove(task.id, col.id); setShowMenu(false); toast.success(`Moved to ${col.label}`); }}
                     className="w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 transition-colors"
                     style={{ color: '#4A4665' }}
                   >
                     → {col.label}
                   </button>
                 ))}
+                <button
+                  onClick={() => { setShowMenu(false); onDelete(task.id); }}
+                  className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-red-50 transition-colors"
+                  style={{ color: '#EF4444' }}
+                >
+                  🗑️ Delete task
+                </button>
               </div>
             )}
           </div>
         </div>
 
         <div className="flex flex-wrap gap-1 mb-2.5">
-          {task.tags.map((tag) => (
+          {(task.tags || []).map((tag) => (
             <span key={`tag-${task.id}-${tag}`} className="badge badge-violet" style={{ fontSize: '10px', padding: '1px 8px' }}>{tag}</span>
           ))}
         </div>

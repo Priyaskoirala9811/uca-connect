@@ -17,6 +17,9 @@ import {
   subscribeToProjectFiles,
   uploadProjectResourceFile,
   sendFirestoreMessageWithOptionalFile,
+  updateFirestoreMessage,
+  deleteFirestoreMessage,
+  deleteFirestoreTask,
   type FirestoreProject,
   type FirestoreMessage,
   type FirestoreUser,
@@ -69,6 +72,8 @@ export default function ProjectWorkspacePage() {
   const [chatFile, setChatFile] = useState<File | null>(null);
   const [uploadingResource, setUploadingResource] = useState(false);
   const [sendingMsg, setSendingMsg] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingMessageText, setEditingMessageText] = useState('');
   const [memberProfiles, setMemberProfiles] = useState<FirestoreUser[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
 
@@ -178,6 +183,40 @@ export default function ProjectWorkspacePage() {
     }
   };
 
+  const handleEditTask = async (task: FirestoreTask) => {
+    if (!activeProjectId) return;
+    const newTitle = window.prompt('Edit task title:', task.title);
+    if (newTitle === null) return;
+    const cleanTitle = newTitle.trim();
+    if (!cleanTitle) {
+      toast.error('Task title cannot be empty.');
+      return;
+    }
+
+    const newDescription = window.prompt('Edit task description:', task.description || '') ?? task.description || '';
+    try {
+      await updateFirestoreTask(activeProjectId, task.id, {
+        title: cleanTitle,
+        description: newDescription.trim(),
+      });
+      toast.success('Task updated.');
+    } catch {
+      toast.error('Task could not be updated. Please try again.');
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!activeProjectId) return;
+    const sure = window.confirm('Delete this task? This cannot be undone.');
+    if (!sure) return;
+    try {
+      await deleteFirestoreTask(activeProjectId, taskId);
+      toast.success('Task deleted.');
+    } catch {
+      toast.error('Task could not be deleted. Please try again.');
+    }
+  };
+
   const handleSendMessage = async () => {
     const trimmed = newMessage.trim();
     if ((!trimmed && !chatFile) || !currentUid || !activeProjectId || !currentUser) return;
@@ -210,6 +249,44 @@ export default function ProjectWorkspacePage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const startEditMessage = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditingMessageText(content);
+  };
+
+  const cancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditingMessageText('');
+  };
+
+  const saveEditedMessage = async () => {
+    if (!activeProjectId || !editingMessageId) return;
+    const cleanText = editingMessageText.trim();
+    if (!cleanText) {
+      toast.error('Message cannot be empty.');
+      return;
+    }
+    try {
+      await updateFirestoreMessage(activeProjectId, editingMessageId, cleanText);
+      cancelEditMessage();
+      toast.success('Message updated.');
+    } catch {
+      toast.error('Message could not be edited. Please try again.');
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!activeProjectId) return;
+    const sure = window.confirm('Delete this message?');
+    if (!sure) return;
+    try {
+      await deleteFirestoreMessage(activeProjectId, messageId);
+      toast.success('Message deleted.');
+    } catch {
+      toast.error('Message could not be deleted. Please try again.');
     }
   };
 
@@ -301,6 +378,7 @@ export default function ProjectWorkspacePage() {
     fileUrl: m.fileUrl,
     fileName: m.fileName,
     fileType: m.fileType,
+    edited: m.edited,
     timestamp: m.createdAt
       ? new Date((m.createdAt as { toDate?: () => Date }).toDate?.() || Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
       : '',
@@ -464,6 +542,8 @@ export default function ProjectWorkspacePage() {
                       members={membersForComponents}
                       onMoveTask={handleMoveTask}
                       onAddTask={(col) => { setAddTaskColumn(col); setShowAddTaskModal(true); }}
+                      onEditTask={handleEditTask}
+                      onDeleteTask={handleDeleteTask}
                     />
                   </div>
                 )}
@@ -507,20 +587,48 @@ export default function ProjectWorkspacePage() {
                                 <span className="text-xs font-medium px-1" style={{ color: '#8B87A0' }}>{senderName.split(' ')[0]}</span>
                               )}
                               <div className={isCurrentUser ? 'message-bubble-self' : 'message-bubble-other'}>
-                                {msg.content && <p>{msg.content}</p>}
-                                {msg.fileUrl && (
-                                  <a
-                                    href={msg.fileUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 block rounded-xl px-3 py-2 text-xs font-semibold underline"
-                                    style={{ background: isCurrentUser ? 'rgba(255,255,255,0.18)' : '#F0ECFF', color: isCurrentUser ? 'white' : '#6C47FF' }}
-                                  >
-                                    📎 {msg.fileName || 'Open file'}
-                                  </a>
+                                {editingMessageId === msg.id ? (
+                                  <div className="flex flex-col gap-2 min-w-[220px]">
+                                    <textarea
+                                      value={editingMessageText}
+                                      onChange={(e) => setEditingMessageText(e.target.value)}
+                                      rows={2}
+                                      className="rounded-lg px-2 py-1 text-xs outline-none resize-none"
+                                      style={{ color: '#1A1730' }}
+                                    />
+                                    <div className="flex gap-2 justify-end">
+                                      <button onClick={cancelEditMessage} className="text-xs font-semibold opacity-80">Cancel</button>
+                                      <button onClick={saveEditedMessage} className="text-xs font-bold underline">Save</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {msg.content && <p>{msg.content}</p>}
+                                    {msg.fileUrl && (
+                                      <a
+                                        href={msg.fileUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="mt-2 block rounded-xl px-3 py-2 text-xs font-semibold underline"
+                                        style={{ background: isCurrentUser ? 'rgba(255,255,255,0.18)' : '#F0ECFF', color: isCurrentUser ? 'white' : '#6C47FF' }}
+                                      >
+                                        📎 {msg.fileName || 'Open file'}
+                                      </a>
+                                    )}
+                                  </>
                                 )}
                               </div>
-                              <span className="text-xs px-1" style={{ color: '#C4C0D4' }}>{msg.timestamp}</span>
+                              <div className="flex items-center gap-2 px-1">
+                                <span className="text-xs" style={{ color: '#C4C0D4' }}>{msg.timestamp}{msg.edited ? ' · edited' : ''}</span>
+                                {isCurrentUser && editingMessageId !== msg.id && (
+                                  <>
+                                    {msg.content && (
+                                      <button onClick={() => startEditMessage(msg.id, msg.content)} className="text-xs font-semibold hover:underline" style={{ color: '#8B87A0' }}>Edit</button>
+                                    )}
+                                    <button onClick={() => handleDeleteMessage(msg.id)} className="text-xs font-semibold hover:underline" style={{ color: '#EF4444' }}>Delete</button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );

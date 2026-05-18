@@ -10,6 +10,8 @@ interface KanbanBoardProps {
   members: StoredUser[];
   onMoveTask: (taskId: string, newStatus: 'todo' | 'inprogress' | 'done') => void;
   onAddTask: (column: 'todo' | 'inprogress' | 'done') => void;
+  onEditTask: (task: FirestoreTask) => void;
+  onDeleteTask: (taskId: string) => void;
 }
 
 const COLUMNS: { id: 'todo' | 'inprogress' | 'done'; label: string; color: string; bg: string; dotColor: string }[] = [
@@ -18,16 +20,15 @@ const COLUMNS: { id: 'todo' | 'inprogress' | 'done'; label: string; color: strin
   { id: 'done', label: 'Done', color: '#16A34A', bg: '#F0FDF4', dotColor: '#22C55E' },
 ];
 
-export default function KanbanBoard({ tasks, members, onMoveTask, onAddTask }: KanbanBoardProps) {
+export default function KanbanBoard({ tasks, members, onMoveTask, onAddTask, onEditTask, onDeleteTask }: KanbanBoardProps) {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 min-w-[700px]">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 min-w-0 md:min-w-[700px]">
       {COLUMNS.map((col) => {
         const colTasks = tasks.filter((t) => t.status === col.id);
         return (
           <div key={`col-${col.id}`} className="kanban-col" style={{ background: col.bg }}>
-            {/* Column header */}
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ background: col.dotColor }} />
@@ -47,7 +48,6 @@ export default function KanbanBoard({ tasks, members, onMoveTask, onAddTask }: K
               </button>
             </div>
 
-            {/* Tasks */}
             <div className="flex flex-col gap-2.5">
               {colTasks.map((task) => {
                 const assignee = members.find((m) => m.id === task.assigneeId);
@@ -59,6 +59,8 @@ export default function KanbanBoard({ tasks, members, onMoveTask, onAddTask }: K
                     isExpanded={expandedTaskId === task.id}
                     onToggleExpand={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
                     onMove={onMoveTask}
+                    onEdit={onEditTask}
+                    onDelete={onDeleteTask}
                     columns={COLUMNS}
                   />
                 );

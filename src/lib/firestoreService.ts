@@ -4,7 +4,7 @@
  * Auth is handled separately by firebaseAuth.ts — do NOT touch auth here.
  */
 
-import { collection, doc, getDoc, getDocs, addDoc, updateDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp, type Unsubscribe } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp, type Unsubscribe } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
 
@@ -64,6 +64,8 @@ export interface FirestoreMessage {
   fileName?: string;
   fileType?: string;
   createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+  edited?: boolean;
 }
 
 export interface FirestoreTask {
@@ -514,6 +516,36 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function withUploadTimeout<T>(promise: Promise<T>, seconds = 30): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error('Upload is taking too long. Please check Firebase Storage is enabled and your Storage rules allow logged-in users to upload.'));
+    }, seconds * 1000);
+
+    promise
+      .then((result) => {
+        window.clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+function getUploadErrorMessage(error: unknown): string {
+  const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : '';
+  if (code.includes('storage/unauthorized')) {
+    return 'Upload blocked by Firebase Storage rules. Please allow authenticated users to upload in Firebase Storage rules.';
+  }
+  if (code.includes('storage/quota-exceeded')) {
+    return 'Firebase Storage quota is full. Please check your Firebase plan/storage usage.';
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return 'File could not be uploaded. Please try again.';
+}
+
 /** Upload PDF/image/document to Firebase Storage and save it in project resources. */
 export async function uploadProjectResourceFile(data: {
   projectId: string;
@@ -525,7 +557,7 @@ export async function uploadProjectResourceFile(data: {
     const safeName = data.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `projects/${data.projectId}/resources/${Date.now()}-${safeName}`;
     const fileRef = ref(storage, filePath);
-    await uploadBytes(fileRef, data.file);
+    await withUploadTimeout(uploadBytes(fileRef, data.file));
     const url = await getDownloadURL(fileRef);
 
     await addDoc(collection(db, 'projects', data.projectId, 'files'), {
@@ -551,8 +583,17 @@ export async function uploadProjectResourceFile(data: {
       type: 'file',
       link: '/project-workspace',
     });
+  } catch (error) {
+    throw new Error(getUploadErrorMessage(error));
+  }
+}
+
+export async function deleteProjectResourceFile(projectId: string, fileId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'files', fileId));
+    await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
   } catch {
-    throw new Error('File could not be uploaded. Please try again.');
+    throw new Error('File could not be deleted. Please try again.');
   }
 }
 
@@ -591,7 +632,7 @@ export async function sendFirestoreMessageWithOptionalFile(data: {
       const safeName = data.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filePath = `projects/${data.projectId}/chat/${Date.now()}-${safeName}`;
       const fileRef = ref(storage, filePath);
-      await uploadBytes(fileRef, data.file);
+      await withUploadTimeout(uploadBytes(fileRef, data.file));
       fileUrl = await getDownloadURL(fileRef);
       fileName = data.file.name;
       fileType = data.file.type || 'file';
@@ -614,8 +655,45 @@ export async function sendFirestoreMessageWithOptionalFile(data: {
       type: 'group-message',
       link: '/project-workspace',
     });
+  } catch (error) {
+    throw new Error(getUploadErrorMessage(error));
+  }
+}
+
+export async function updateFirestoreMessage(
+  projectId: string,
+  messageId: string,
+  text: string
+): Promise<void> {
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error('Message cannot be empty.');
+  try {
+    await updateDoc(doc(db, 'projects', projectId, 'messages', messageId), {
+      text: cleanText,
+      edited: true,
+      updatedAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
   } catch {
-    throw new Error('Message could not be sent. Please try again.');
+    throw new Error('Message could not be edited. Please try again.');
+  }
+}
+
+export async function deleteFirestoreMessage(projectId: string, messageId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'messages', messageId));
+    await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
+  } catch {
+    throw new Error('Message could not be deleted. Please try again.');
+  }
+}
+
+export async function deleteFirestoreTask(projectId: string, taskId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'tasks', taskId));
+    await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
+  } catch {
+    throw new Error('Task could not be deleted. Please try again.');
   }
 }
 
