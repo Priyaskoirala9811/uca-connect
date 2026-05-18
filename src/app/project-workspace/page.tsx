@@ -193,7 +193,7 @@ export default function ProjectWorkspacePage() {
       return;
     }
 
-    const newDescription = window.prompt('Edit task description:', task.description || '') ?? task.description || '';
+   const newDescription = window.prompt('Edit task description:', task.description || '') ?? (task.description || '');
     try {
       await updateFirestoreTask(activeProjectId, task.id, {
         title: cleanTitle,
