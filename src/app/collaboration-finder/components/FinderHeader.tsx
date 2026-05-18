@@ -25,22 +25,22 @@ export default function FinderHeader({
 }: FinderHeaderProps) {
   return (
     <div
-      className="flex-shrink-0 border-b bg-white px-6 py-4"
+      className="flex-shrink-0 border-b bg-white px-4 py-4 sm:px-6"
       style={{ borderColor: '#E8E6F0' }}
     >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         {/* Title + count */}
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: '#1A1730' }}>Collaboration Finder</h1>
-          <p className="text-sm mt-0.5" style={{ color: '#8B87A0' }}>
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold leading-tight" style={{ color: '#1A1730' }}>Collaboration Finder</h1>
+          <p className="text-sm mt-0.5 leading-snug" style={{ color: '#8B87A0' }}>
             Discover students and tutors across all four UCA campuses
           </p>
         </div>
 
         {/* Search + controls */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap xl:w-auto">
           {/* Search */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2"
               width="15"
@@ -58,8 +58,7 @@ export default function FinderHeader({
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Search by name, skill, course…"
-              className="input-field pl-9 pr-4 py-2 text-sm"
-              style={{ width: '280px' }}
+              className="input-field w-full pl-9 pr-4 py-2 text-sm sm:w-[280px]"
             />
             {search && (
               <button
@@ -76,7 +75,7 @@ export default function FinderHeader({
           {/* Filter toggle */}
           <button
             onClick={onToggleFilterSidebar}
-            className="relative flex items-center gap-2 py-2 px-3.5 rounded-xl border text-sm font-medium transition-all duration-150 hover:bg-[#F0ECFF]"
+            className="relative flex w-full items-center justify-center gap-2 py-2 px-3.5 rounded-xl border text-sm font-medium transition-all duration-150 hover:bg-[#F0ECFF] sm:w-auto"
             style={{
               borderColor: activeFilterCount > 0 ? '#6C47FF' : '#E8E6F0',
               color: activeFilterCount > 0 ? '#6C47FF' : '#4A4665',
@@ -111,7 +110,7 @@ export default function FinderHeader({
       </div>
 
       {/* Result count */}
-      <div className="flex items-center gap-3 mt-3">
+      <div className="flex flex-col items-start gap-2 mt-3 sm:flex-row sm:items-center sm:gap-3">
         <p className="text-xs" style={{ color: '#8B87A0' }}>
           Showing{' '}
           <span className="font-semibold" style={{ color: '#1A1730' }}>{resultCount}</span>

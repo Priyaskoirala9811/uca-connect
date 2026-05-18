@@ -29,8 +29,8 @@ export default function UserCard({
   return (
     <div className="user-card" onClick={onViewProfile}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-3 min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="relative flex-shrink-0">
             <div
               className="avatar w-12 h-12 text-sm"
@@ -219,7 +219,7 @@ export default function UserCard({
 
       {/* Actions */}
       <div
-        className="flex gap-2 pt-1 border-t"
+        className="grid grid-cols-1 gap-2 pt-1 border-t sm:grid-cols-3"
         style={{ borderColor: '#F0ECFF' }}
       >
         <button
@@ -227,7 +227,7 @@ export default function UserCard({
             e.stopPropagation();
             onViewProfile();
           }}
-          className="flex-1 py-2 rounded-xl text-xs font-medium transition-all duration-150 hover:bg-[#F0ECFF] active:scale-95 border"
+          className="w-full py-2 rounded-xl text-xs font-medium transition-all duration-150 hover:bg-[#F0ECFF] active:scale-95 border"
           style={{
             borderColor: '#E8E6F0',
             color: '#4A4665',
@@ -241,7 +241,7 @@ export default function UserCard({
             e.stopPropagation();
             onMessage();
           }}
-          className="flex-1 py-2 rounded-xl text-xs font-medium transition-all duration-150 hover:bg-[#F0ECFF] active:scale-95 border"
+          className="w-full py-2 rounded-xl text-xs font-medium transition-all duration-150 hover:bg-[#F0ECFF] active:scale-95 border"
           style={{
             borderColor: '#E8E6F0',
             color: '#4A4665',
@@ -255,7 +255,7 @@ export default function UserCard({
             e.stopPropagation();
             onInvite();
           }}
-          className="flex-1 btn-primary py-2 text-xs flex items-center justify-center gap-1"
+          className="w-full btn-primary py-2 text-xs flex items-center justify-center gap-1"
           disabled={!user.available}
           style={{
             opacity: user.available ? 1 : 0.5,

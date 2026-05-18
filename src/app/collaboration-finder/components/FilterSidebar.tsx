@@ -41,8 +41,8 @@ export default function FilterSidebar({ filters, onFiltersChange, onClose }: Fil
 
   return (
     <div
-      className="flex-shrink-0 flex flex-col border-r bg-white overflow-y-auto scrollbar-thin animate-slide-right"
-      style={{ width: '260px', borderColor: '#E8E6F0' }}
+      className="fixed left-0 top-0 bottom-0 z-40 w-[86vw] max-w-[320px] flex-shrink-0 flex flex-col border-r bg-white overflow-y-auto scrollbar-thin animate-slide-right lg:static lg:z-auto lg:w-[260px] lg:max-w-none"
+      style={{ borderColor: '#E8E6F0' }}
     >
       {/* Header */}
       <div

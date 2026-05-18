@@ -91,7 +91,21 @@ export default function CollaborationFinderScreen() {
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
   const [inviteTarget, setInviteTarget] = useState<UserProfile | null>(null);
   const [messageTarget, setMessageTarget] = useState<UserProfile | null>(null);
-  const [filterSidebarOpen, setFilterSidebarOpen] = useState(true);
+  const [filterSidebarOpen, setFilterSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setFilterSidebarOpen(true);
+      } else {
+        setFilterSidebarOpen(false);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -186,16 +200,24 @@ export default function CollaborationFinderScreen() {
           onClearFilters={handleClearFilters}
         />
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="relative flex flex-1 overflow-hidden">
           {filterSidebarOpen && (
-            <FilterSidebar
-              filters={filters}
-              onFiltersChange={setFilters}
-              onClose={() => setFilterSidebarOpen(false)}
-            />
+            <>
+              <button
+                type="button"
+                aria-label="Close filters"
+                onClick={() => setFilterSidebarOpen(false)}
+                className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+              />
+              <FilterSidebar
+                filters={filters}
+                onFiltersChange={setFilters}
+                onClose={() => setFilterSidebarOpen(false)}
+              />
+            </>
           )}
 
-          <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-4 sm:p-6 min-w-0">
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full py-20 text-center">
                 <div className="w-10 h-10 rounded-full border-4 border-[#6C47FF] border-t-transparent animate-spin mb-4" />

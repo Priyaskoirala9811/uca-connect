@@ -192,7 +192,7 @@ export default function Sidebar({
 
         {/* My Profile link with notification badge */}
         <Link
-          href="/profile"
+          href="/profile?tab=notifications"
           onClick={onMobileClose}
           className={`sidebar-item relative ${currentPath === '/profile' ? 'active' : ''} ${collapsed ? 'justify-center px-2' : ''}`}
           title={collapsed ? 'My Profile' : undefined}
