@@ -11,12 +11,19 @@ import {
   createFirestoreProject,
   getFirestoreUser,
   subscribeToMessages,
-  sendFirestoreMessage,
+  subscribeToProjectTasks,
+  addFirestoreTask,
+  updateFirestoreTask,
+  subscribeToProjectFiles,
+  uploadProjectResourceFile,
+  sendFirestoreMessageWithOptionalFile,
   type FirestoreProject,
   type FirestoreMessage,
   type FirestoreUser,
+  type FirestoreTask,
+  type FirestoreResourceFile,
 } from '@/lib/firestoreService';
-import { getTasks, addTask, updateTask, getFiles, addFile, type StoredTask, type StoredFile, type ProjectType } from '@/lib/storage';
+import type { ProjectType } from '@/lib/storage';
 import KanbanBoard from './components/KanbanBoard';
 import AddTaskModal from './components/AddTaskModal';
 import CodeWorkspace from './components/CodeWorkspace';
@@ -39,6 +46,9 @@ const FILE_ICONS: Record<string, { icon: string; color: string; bg: string }> = 
   slides: { icon: '📊', color: '#F59E0B', bg: '#FFFBEB' },
   video: { icon: '🎬', color: '#0EA5E9', bg: '#EFF6FF' },
   link: { icon: '🔗', color: '#22C55E', bg: '#F0FDF4' },
+  image: { icon: '🖼️', color: '#0EA5E9', bg: '#EFF6FF' },
+  document: { icon: '📝', color: '#6C47FF', bg: '#F0ECFF' },
+  other: { icon: '📦', color: '#64748B', bg: '#F1F5F9' },
 };
 
 export default function ProjectWorkspacePage() {
@@ -47,15 +57,17 @@ export default function ProjectWorkspacePage() {
   const [currentUid, setCurrentUid] = useState<string | null>(null);
   const [projects, setProjects] = useState<FirestoreProject[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [tasks, setTasks] = useState<StoredTask[]>([]);
+  const [tasks, setTasks] = useState<FirestoreTask[]>([]);
   const [messages, setMessages] = useState<FirestoreMessage[]>([]);
-  const [files, setFiles] = useState<StoredFile[]>([]);
+  const [files, setFiles] = useState<FirestoreResourceFile[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('board');
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [addTaskColumn, setAddTaskColumn] = useState<'todo' | 'inprogress' | 'done'>('todo');
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [newProjectForm, setNewProjectForm] = useState({ title: '', description: '', type: 'general' as ProjectType, tags: '' });
   const [newMessage, setNewMessage] = useState('');
+  const [chatFile, setChatFile] = useState<File | null>(null);
+  const [uploadingResource, setUploadingResource] = useState(false);
   const [sendingMsg, setSendingMsg] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<FirestoreUser[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -88,8 +100,8 @@ export default function ProjectWorkspacePage() {
 
   const selectProject = useCallback(async (projectId: string, members: string[]) => {
     setActiveProjectId(projectId);
-    setTasks(getTasks(projectId));
-    setFiles(getFiles(projectId));
+    setTasks([]);
+    setFiles([]);
     setActiveTab('board');
     // Load member profiles
     const profiles = await Promise.all(members.map((uid) => getFirestoreUser(uid)));
@@ -102,6 +114,20 @@ export default function ProjectWorkspacePage() {
     const unsub = subscribeToMessages(activeProjectId, (msgs) => {
       setMessages(msgs);
     });
+    return () => unsub();
+  }, [activeProjectId]);
+
+  // Subscribe to shared project tasks so every member sees the same board
+  useEffect(() => {
+    if (!activeProjectId) return;
+    const unsub = subscribeToProjectTasks(activeProjectId, setTasks);
+    return () => unsub();
+  }, [activeProjectId]);
+
+  // Subscribe to shared resource files
+  useEffect(() => {
+    if (!activeProjectId) return;
+    const unsub = subscribeToProjectFiles(activeProjectId, setFiles);
     return () => unsub();
   }, [activeProjectId]);
 
@@ -127,25 +153,45 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const handleMoveTask = (taskId: string, newStatus: 'todo' | 'inprogress' | 'done') => {
-    updateTask(taskId, { status: newStatus });
+  const handleMoveTask = async (taskId: string, newStatus: 'todo' | 'inprogress' | 'done') => {
+    if (!activeProjectId) return;
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t));
+    try {
+      await updateFirestoreTask(activeProjectId, taskId, { status: newStatus });
+    } catch {
+      toast.error('Task could not be updated. Please try again.');
+    }
   };
 
-  const handleAddTask = (taskData: Omit<StoredTask, 'id' | 'createdAt'>) => {
-    const newTask = addTask(taskData);
-    setTasks((prev) => [...prev, newTask]);
-    setShowAddTaskModal(false);
-    toast.success('Task added!');
+  const handleAddTask = async (taskData: Omit<FirestoreTask, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!activeProjectId || !currentUid) return;
+    try {
+      await addFirestoreTask(activeProjectId, {
+        ...taskData,
+        projectId: activeProjectId,
+        createdBy: currentUid,
+      });
+      setShowAddTaskModal(false);
+      toast.success('Task added!');
+    } catch {
+      toast.error('Task could not be saved. Please try again.');
+    }
   };
 
   const handleSendMessage = async () => {
     const trimmed = newMessage.trim();
-    if (!trimmed || !currentUid || !activeProjectId || !currentUser) return;
+    if ((!trimmed && !chatFile) || !currentUid || !activeProjectId || !currentUser) return;
     setSendingMsg(true);
     try {
-      await sendFirestoreMessage(activeProjectId, currentUid, currentUser.fullName, trimmed);
+      await sendFirestoreMessageWithOptionalFile({
+        projectId: activeProjectId,
+        senderId: currentUid,
+        senderName: currentUser.fullName,
+        text: trimmed,
+        file: chatFile,
+      });
       setNewMessage('');
+      setChatFile(null);
     } catch {
       toast.error('Something went wrong. Please try again.');
     } finally {
@@ -160,10 +206,47 @@ export default function ProjectWorkspacePage() {
     }
   };
 
-  const handleAddFile = (fileData: Omit<StoredFile, 'id'>) => {
-    const newFile = addFile(fileData);
-    setFiles((prev) => [...prev, newFile]);
-    toast.success('Resource added!');
+  const handleResourceUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !activeProjectId || !currentUid || !currentUser) return;
+
+    const allowedTypes = [
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'image/gif',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please upload PDF, image, Word, or PowerPoint files only.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File is too large. Maximum size is 10MB.');
+      return;
+    }
+
+    setUploadingResource(true);
+    try {
+      await uploadProjectResourceFile({
+        projectId: activeProjectId,
+        file,
+        uploadedById: currentUid,
+        uploadedByName: currentUser.fullName,
+      });
+      toast.success('File uploaded!');
+    } catch {
+      toast.error('File could not be uploaded. Please try again.');
+    } finally {
+      setUploadingResource(false);
+    }
   };
 
   const activeProject = projects.find((p) => p.id === activeProjectId) || null;
@@ -207,6 +290,9 @@ export default function ProjectWorkspacePage() {
     projectId: activeProjectId || '',
     senderId: m.senderId,
     content: m.text,
+    fileUrl: m.fileUrl,
+    fileName: m.fileName,
+    fileType: m.fileType,
     timestamp: m.createdAt
       ? new Date((m.createdAt as { toDate?: () => Date }).toDate?.() || Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
       : '',
@@ -381,7 +467,7 @@ export default function ProjectWorkspacePage() {
                   <PresentationWorkspace projectId={activeProject.id} />
                 )}
                 {activeTab === 'workspace' && activeProject.type === 'design' && (
-                  <DesignBoard projectId={activeProject.id} files={files} onAddFile={handleAddFile} currentUserId={currentUid || ''} />
+                  <DesignBoard projectId={activeProject.id} files={[]} onAddFile={() => {}} currentUserId={currentUid || ''} />
                 )}
 
                 {/* Online Chat */}
@@ -412,7 +498,20 @@ export default function ProjectWorkspacePage() {
                               {!isCurrentUser && (
                                 <span className="text-xs font-medium px-1" style={{ color: '#8B87A0' }}>{senderName.split(' ')[0]}</span>
                               )}
-                              <div className={isCurrentUser ? 'message-bubble-self' : 'message-bubble-other'}>{msg.content}</div>
+                              <div className={isCurrentUser ? 'message-bubble-self' : 'message-bubble-other'}>
+                                {msg.content && <p>{msg.content}</p>}
+                                {msg.fileUrl && (
+                                  <a
+                                    href={msg.fileUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-2 block rounded-xl px-3 py-2 text-xs font-semibold underline"
+                                    style={{ background: isCurrentUser ? 'rgba(255,255,255,0.18)' : '#F0ECFF', color: isCurrentUser ? 'white' : '#6C47FF' }}
+                                  >
+                                    📎 {msg.fileName || 'Open file'}
+                                  </a>
+                                )}
+                              </div>
                               <span className="text-xs px-1" style={{ color: '#C4C0D4' }}>{msg.timestamp}</span>
                             </div>
                           </div>
@@ -421,6 +520,15 @@ export default function ProjectWorkspacePage() {
                     </div>
                     <div className="flex-shrink-0 p-3 border-t" style={{ borderColor: '#E8E6F0' }}>
                       <div className="flex items-end gap-2 rounded-xl border p-2" style={{ borderColor: '#E8E6F0', background: '#F8F7FF' }}>
+                        <label className="p-2 rounded-lg cursor-pointer hover:bg-white transition-colors flex-shrink-0" title="Attach file">
+                          📎
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,image/*,.doc,.docx,.ppt,.pptx"
+                            onChange={(e) => setChatFile(e.target.files?.[0] || null)}
+                          />
+                        </label>
                         <textarea
                           value={newMessage}
                           onChange={(e) => setNewMessage(e.target.value)}
@@ -432,9 +540,9 @@ export default function ProjectWorkspacePage() {
                         />
                         <button
                           onClick={handleSendMessage}
-                          disabled={!newMessage.trim() || sendingMsg}
+                          disabled={(!newMessage.trim() && !chatFile) || sendingMsg}
                           className="p-2 rounded-lg transition-all duration-150 active:scale-95 flex-shrink-0"
-                          style={{ background: newMessage.trim() ? '#6C47FF' : '#E8E6F0', color: newMessage.trim() ? 'white' : '#8B87A0' }}
+                          style={{ background: (newMessage.trim() || chatFile) ? '#6C47FF' : '#E8E6F0', color: (newMessage.trim() || chatFile) ? 'white' : '#8B87A0' }}
                         >
                           {sendingMsg ? (
                             <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin block" />
@@ -446,6 +554,12 @@ export default function ProjectWorkspacePage() {
                           )}
                         </button>
                       </div>
+                      {chatFile && (
+                        <div className="mt-2 flex items-center justify-between rounded-xl px-3 py-2 text-xs" style={{ background: '#F0ECFF', color: '#6C47FF' }}>
+                          <span className="truncate">📎 {chatFile.name}</span>
+                          <button onClick={() => setChatFile(null)} className="font-bold">Remove</button>
+                        </div>
+                      )}
                       <p className="text-xs mt-1.5 text-center" style={{ color: '#C4C0D4' }}>Shift+Enter for new line</p>
                     </div>
                   </div>
@@ -455,6 +569,16 @@ export default function ProjectWorkspacePage() {
                   <div className="flex flex-col h-full bg-white overflow-y-auto scrollbar-thin p-4">
                     <div className="flex items-center justify-between mb-4">
                       <span className="text-sm font-semibold" style={{ color: '#4A4665' }}>{files.length} resources</span>
+                      <label className="btn-primary py-2 px-4 text-xs cursor-pointer">
+                        {uploadingResource ? 'Uploading…' : '+ Upload File'}
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,image/*,.doc,.docx,.ppt,.pptx"
+                          disabled={uploadingResource}
+                          onChange={handleResourceUpload}
+                        />
+                      </label>
                     </div>
                     {files.length === 0 ? (
                       <div className="text-center py-12">
@@ -478,7 +602,9 @@ export default function ProjectWorkspacePage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-semibold truncate" style={{ color: '#1A1730' }}>{file.name}</p>
-                                <p className="text-xs mt-0.5" style={{ color: '#8B87A0' }}>{file.uploadedAt}</p>
+                                <p className="text-xs mt-0.5" style={{ color: '#8B87A0' }}>
+                                  {file.size || ''} {file.uploadedByName ? `· ${file.uploadedByName}` : ''}
+                                </p>
                               </div>
                             </div>
                           );

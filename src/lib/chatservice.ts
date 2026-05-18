@@ -2,14 +2,11 @@ import {
   addDoc,
   collection,
   doc,
-  getDocs,
-  limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
-  where,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -21,7 +18,11 @@ export interface ChatMessage {
   createdAt?: any;
 }
 
-export async function createOrOpenChat(currentUserId: string, targetUserId: string, targetName: string) {
+export async function createOrOpenChat(
+  currentUserId: string,
+  targetUserId: string,
+  targetName: string
+) {
   const sortedIds = [currentUserId, targetUserId].sort();
   const chatId = sortedIds.join('_');
 
@@ -38,19 +39,22 @@ export async function createOrOpenChat(currentUserId: string, targetUserId: stri
   return chatId;
 }
 
-export function listenToMessages(chatId: string, callback: (messages: ChatMessage[]) => void) {
+export function listenToMessages(
+  chatId: string,
+  callback: (messages: ChatMessage[]) => void
+) {
   const q = query(
     collection(db, 'projectChats', chatId, 'messages'),
     orderBy('createdAt', 'asc')
   );
 
   return onSnapshot(q, (snapshot) => {
-    callback(
-      snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ChatMessage[]
-    );
+    const messages = snapshot.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+    })) as ChatMessage[];
+
+    callback(messages);
   });
 }
 

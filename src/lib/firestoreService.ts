@@ -4,8 +4,9 @@
  * Auth is handled separately by firebaseAuth.ts — do NOT touch auth here.
  */
 
-import { collection, doc, getDoc, getDocs, addDoc, updateDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp, type Unsubscribe,  } from 'firebase/firestore';
-import { db } from './firebase';
+import { collection, doc, getDoc, getDocs, addDoc, updateDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp, type Unsubscribe } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,38 @@ export interface FirestoreMessage {
   senderId: string;
   senderName: string;
   text: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
   createdAt?: Timestamp;
+}
+
+export interface FirestoreTask {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  status: 'todo' | 'inprogress' | 'done';
+  priority: 'high' | 'medium' | 'low';
+  assigneeId: string;
+  dueDate: string;
+  tags: string[];
+  createdBy: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface FirestoreResourceFile {
+  id: string;
+  projectId: string;
+  name: string;
+  url: string;
+  type: 'pdf' | 'image' | 'document' | 'link' | 'other';
+  mimeType?: string;
+  size?: string;
+  uploadedById: string;
+  uploadedByName: string;
+  uploadedAt?: Timestamp;
 }
 
 export interface FirestoreLibraryRequest {
@@ -277,6 +309,167 @@ export async function sendFirestoreMessage(
     });
   } catch {
     throw new Error('Something went wrong. Please try again.');
+  }
+}
+
+
+
+// ── Shared Tasks ──────────────────────────────────────────────────────────────
+
+/** Subscribe to project tasks in real time so every project member sees updates. */
+export function subscribeToProjectTasks(
+  projectId: string,
+  callback: (tasks: FirestoreTask[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    query(collection(db, 'projects', projectId, 'tasks'), orderBy('createdAt', 'asc')),
+    (snap) => {
+      const tasks = snap.docs.map((d) => ({ id: d.id, projectId, ...d.data() } as FirestoreTask));
+      callback(tasks);
+    },
+    () => callback([])
+  );
+}
+
+/** Add task into the shared project task collection. */
+export async function addFirestoreTask(
+  projectId: string,
+  task: Omit<FirestoreTask, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<void> {
+  try {
+    await addDoc(collection(db, 'projects', projectId, 'tasks'), {
+      ...task,
+      projectId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
+  } catch {
+    throw new Error('Task could not be saved. Please try again.');
+  }
+}
+
+/** Update task status/details in Firestore. */
+export async function updateFirestoreTask(
+  projectId: string,
+  taskId: string,
+  updates: Partial<FirestoreTask>
+): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
+  } catch {
+    throw new Error('Task could not be updated. Please try again.');
+  }
+}
+
+// ── Shared Resource Files ─────────────────────────────────────────────────────
+
+function getResourceType(file: File): FirestoreResourceFile['type'] {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type === 'application/pdf') return 'pdf';
+  if (
+    file.type.includes('word') ||
+    file.type.includes('document') ||
+    file.name.endsWith('.doc') ||
+    file.name.endsWith('.docx') ||
+    file.name.endsWith('.ppt') ||
+    file.name.endsWith('.pptx')
+  ) return 'document';
+  return 'other';
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Upload PDF/image/document to Firebase Storage and save it in project resources. */
+export async function uploadProjectResourceFile(data: {
+  projectId: string;
+  file: File;
+  uploadedById: string;
+  uploadedByName: string;
+}): Promise<void> {
+  try {
+    const safeName = data.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `projects/${data.projectId}/resources/${Date.now()}-${safeName}`;
+    const fileRef = ref(storage, filePath);
+    await uploadBytes(fileRef, data.file);
+    const url = await getDownloadURL(fileRef);
+
+    await addDoc(collection(db, 'projects', data.projectId, 'files'), {
+      projectId: data.projectId,
+      name: data.file.name,
+      url,
+      type: getResourceType(data.file),
+      mimeType: data.file.type,
+      size: formatFileSize(data.file.size),
+      uploadedById: data.uploadedById,
+      uploadedByName: data.uploadedByName,
+      uploadedAt: serverTimestamp(),
+    });
+
+    await updateDoc(doc(db, 'projects', data.projectId), { updatedAt: serverTimestamp() });
+  } catch {
+    throw new Error('File could not be uploaded. Please try again.');
+  }
+}
+
+/** Subscribe to project resource files in real time. */
+export function subscribeToProjectFiles(
+  projectId: string,
+  callback: (files: FirestoreResourceFile[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    query(collection(db, 'projects', projectId, 'files'), orderBy('uploadedAt', 'desc')),
+    (snap) => {
+      const files = snap.docs.map((d) => ({ id: d.id, projectId, ...d.data() } as FirestoreResourceFile));
+      callback(files);
+    },
+    () => callback([])
+  );
+}
+
+/** Send a chat message with an optional uploaded file attachment. */
+export async function sendFirestoreMessageWithOptionalFile(data: {
+  projectId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  file?: File | null;
+}): Promise<void> {
+  const cleanText = data.text.trim();
+  if (!cleanText && !data.file) throw new Error('Message cannot be empty.');
+
+  try {
+    let fileUrl = '';
+    let fileName = '';
+    let fileType = '';
+
+    if (data.file) {
+      const safeName = data.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `projects/${data.projectId}/chat/${Date.now()}-${safeName}`;
+      const fileRef = ref(storage, filePath);
+      await uploadBytes(fileRef, data.file);
+      fileUrl = await getDownloadURL(fileRef);
+      fileName = data.file.name;
+      fileType = data.file.type || 'file';
+    }
+
+    await addDoc(collection(db, 'projects', data.projectId, 'messages'), {
+      senderId: data.senderId,
+      senderName: data.senderName,
+      text: cleanText,
+      ...(fileUrl ? { fileUrl, fileName, fileType } : {}),
+      createdAt: serverTimestamp(),
+    });
+  } catch {
+    throw new Error('Message could not be sent. Please try again.');
   }
 }
 
