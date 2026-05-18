@@ -58,7 +58,8 @@ export default function ChatModal({
       auth.currentUser?.displayName ||
         auth.currentUser?.email ||
         'UCA User',
-      text
+      text,
+      target.id
     );
 
     setText('');

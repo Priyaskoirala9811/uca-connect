@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import type { StoredTask, StoredUser } from '@/lib/storage';
+import type { StoredUser } from '@/lib/storage';
+import type { FirestoreTask } from '@/lib/firestoreService';
 
 interface TaskCardProps {
-  task: StoredTask;
+  task: FirestoreTask;
   assignee?: StoredUser;
   isExpanded: boolean;
   onToggleExpand: () => void;

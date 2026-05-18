@@ -181,6 +181,12 @@ export default function ProjectWorkspacePage() {
   const handleSendMessage = async () => {
     const trimmed = newMessage.trim();
     if ((!trimmed && !chatFile) || !currentUid || !activeProjectId || !currentUser) return;
+
+    if (chatFile && chatFile.size > 10 * 1024 * 1024) {
+      toast.error('File is too large. Maximum size is 10MB.');
+      return;
+    }
+
     setSendingMsg(true);
     try {
       await sendFirestoreMessageWithOptionalFile({
@@ -192,8 +198,9 @@ export default function ProjectWorkspacePage() {
       });
       setNewMessage('');
       setChatFile(null);
-    } catch {
-      toast.error('Something went wrong. Please try again.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Message could not be sent. Please try again.';
+      toast.error(message);
     } finally {
       setSendingMsg(false);
     }
@@ -242,8 +249,9 @@ export default function ProjectWorkspacePage() {
         uploadedByName: currentUser.fullName,
       });
       toast.success('File uploaded!');
-    } catch {
-      toast.error('File could not be uploaded. Please try again.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'File could not be uploaded. Please try again.';
+      toast.error(message);
     } finally {
       setUploadingResource(false);
     }

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { StoredTask } from '@/lib/storage';
 import type { StoredUser } from '@/lib/storage';
+import type { FirestoreTask } from '@/lib/firestoreService';
 import TaskCard from './TaskCard';
 
 interface KanbanBoardProps {
-  tasks: StoredTask[];
+  tasks: FirestoreTask[];
   members: StoredUser[];
   onMoveTask: (taskId: string, newStatus: 'todo' | 'inprogress' | 'done') => void;
   onAddTask: (column: 'todo' | 'inprogress' | 'done') => void;

@@ -94,6 +94,21 @@ export interface FirestoreResourceFile {
   uploadedAt?: Timestamp;
 }
 
+
+export interface FirestoreNotification {
+  id: string;
+  userId: string;
+  title: string;
+  body: string;
+  type: 'invite' | 'direct-message' | 'group-message' | 'task' | 'file' | 'project';
+  link?: string;
+  read?: boolean;
+  fromUserId?: string;
+  fromUserName?: string;
+  projectId?: string;
+  createdAt?: Timestamp;
+}
+
 export interface FirestoreLibraryRequest {
   id?: string;
   studentName: string;
@@ -104,6 +119,86 @@ export interface FirestoreLibraryRequest {
   urgency: 'low' | 'normal' | 'high';
   status: 'pending';
   createdAt?: Timestamp;
+}
+
+
+// ── Notifications ────────────────────────────────────────────────────────────
+
+export async function createFirestoreNotification(data: Omit<FirestoreNotification, 'id' | 'createdAt' | 'read'>): Promise<void> {
+  try {
+    await addDoc(collection(db, 'notifications'), {
+      ...data,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  } catch {
+    // Do not block the main app action if notification creation fails.
+  }
+}
+
+export function subscribeToNotifications(
+  userId: string,
+  callback: (notifications: FirestoreNotification[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId)
+    ),
+    (snap) => {
+      const notifications = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as FirestoreNotification))
+        .sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+      callback(notifications);
+    },
+    () => callback([])
+  );
+}
+
+export async function markFirestoreNotificationRead(notificationId: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+  } catch {
+    // ignore
+  }
+}
+
+async function notifyProjectMembers(data: {
+  projectId: string;
+  fromUserId: string;
+  fromUserName: string;
+  title: string;
+  body: string;
+  type: FirestoreNotification['type'];
+  link?: string;
+}): Promise<void> {
+  try {
+    const snap = await getDoc(doc(db, 'projects', data.projectId));
+    if (!snap.exists()) return;
+    const project = snap.data() as FirestoreProject;
+    const receivers = (project.members || []).filter((uid) => uid !== data.fromUserId);
+
+    await Promise.all(
+      receivers.map((uid) =>
+        createFirestoreNotification({
+          userId: uid,
+          title: data.title,
+          body: data.body,
+          type: data.type,
+          link: data.link || '/project-workspace',
+          fromUserId: data.fromUserId,
+          fromUserName: data.fromUserName,
+          projectId: data.projectId,
+        })
+      )
+    );
+  } catch {
+    // ignore
+  }
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -223,6 +318,17 @@ export async function sendFirestoreInvite(data: {
       status: 'pending',
       createdAt: serverTimestamp(),
     });
+
+    await createFirestoreNotification({
+      userId: data.toUserId,
+      title: `Project invite from ${data.fromUserName}`,
+      body: `You were invited to join ${data.projectTitle}.`,
+      type: 'invite',
+      link: '/profile',
+      fromUserId: data.fromUserId,
+      fromUserName: data.fromUserName,
+      projectId: data.projectId,
+    });
   } catch {
     throw new Error('Something went wrong. Please try again.');
   }
@@ -307,6 +413,16 @@ export async function sendFirestoreMessage(
       text: text.trim(),
       createdAt: serverTimestamp(),
     });
+
+    await notifyProjectMembers({
+      projectId,
+      fromUserId: senderId,
+      fromUserName: senderName,
+      title: `New group message from ${senderName}`,
+      body: text.trim().length > 90 ? `${text.trim().slice(0, 90)}...` : text.trim(),
+      type: 'group-message',
+      link: '/project-workspace',
+    });
   } catch {
     throw new Error('Something went wrong. Please try again.');
   }
@@ -344,6 +460,16 @@ export async function addFirestoreTask(
       updatedAt: serverTimestamp(),
     });
     await updateDoc(doc(db, 'projects', projectId), { updatedAt: serverTimestamp() });
+
+    await notifyProjectMembers({
+      projectId,
+      fromUserId: task.createdBy,
+      fromUserName: 'A team member',
+      title: 'New task added',
+      body: task.title,
+      type: 'task',
+      link: '/project-workspace',
+    });
   } catch {
     throw new Error('Task could not be saved. Please try again.');
   }
@@ -415,6 +541,16 @@ export async function uploadProjectResourceFile(data: {
     });
 
     await updateDoc(doc(db, 'projects', data.projectId), { updatedAt: serverTimestamp() });
+
+    await notifyProjectMembers({
+      projectId: data.projectId,
+      fromUserId: data.uploadedById,
+      fromUserName: data.uploadedByName,
+      title: `${data.uploadedByName} uploaded a file`,
+      body: data.file.name,
+      type: 'file',
+      link: '/project-workspace',
+    });
   } catch {
     throw new Error('File could not be uploaded. Please try again.');
   }
@@ -467,6 +603,16 @@ export async function sendFirestoreMessageWithOptionalFile(data: {
       text: cleanText,
       ...(fileUrl ? { fileUrl, fileName, fileType } : {}),
       createdAt: serverTimestamp(),
+    });
+
+    await notifyProjectMembers({
+      projectId: data.projectId,
+      fromUserId: data.senderId,
+      fromUserName: data.senderName,
+      title: `New group message from ${data.senderName}`,
+      body: fileName ? `Sent a file: ${fileName}` : (cleanText.length > 90 ? `${cleanText.slice(0, 90)}...` : cleanText),
+      type: 'group-message',
+      link: '/project-workspace',
     });
   } catch {
     throw new Error('Message could not be sent. Please try again.');

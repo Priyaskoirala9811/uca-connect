@@ -7,7 +7,7 @@ import AppLogo from './ui/AppLogo';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { firebaseLogout } from '@/lib/firebaseAuth';
-import { subscribeToInvites } from '@/lib/firestoreService';
+import { subscribeToInvites, subscribeToNotifications } from '@/lib/firestoreService';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -96,13 +96,40 @@ export default function Sidebar({
     return () => unsub();
   }, []);
 
-  // Subscribe to pending invites for notification badge
+  // Subscribe to invites + app notifications. This gives users a visible badge for
+  // direct messages, group messages, new tasks, files and invites.
   useEffect(() => {
     if (!currentUid) return;
-    const unsub = subscribeToInvites(currentUid, (invites) => {
-      setNotifCount(invites.filter((i) => i.status === 'pending').length);
+
+    let inviteCount = 0;
+    let notificationCount = 0;
+
+    const updateCount = () => setNotifCount(inviteCount + notificationCount);
+
+    const unsubInvites = subscribeToInvites(currentUid, (invites) => {
+      inviteCount = invites.filter((i) => i.status === 'pending').length;
+      updateCount();
     });
-    return () => unsub();
+
+    const unsubNotifications = subscribeToNotifications(currentUid, (notifications) => {
+      const unread = notifications.filter((n) => !n.read);
+      notificationCount = unread.length;
+      updateCount();
+
+      const newest = unread[0];
+      if (newest && typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => undefined);
+        } else if (Notification.permission === 'granted') {
+          new Notification(newest.title, { body: newest.body });
+        }
+      }
+    });
+
+    return () => {
+      unsubInvites();
+      unsubNotifications();
+    };
   }, [currentUid]);
 
   const handleLogout = async () => {

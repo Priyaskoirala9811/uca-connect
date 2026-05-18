@@ -9,6 +9,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { createFirestoreNotification } from './firestoreService';
 
 export interface ChatMessage {
   id: string;
@@ -62,7 +63,8 @@ export async function sendChatMessage(
   chatId: string,
   senderId: string,
   senderName: string,
-  text: string
+  text: string,
+  targetUserId?: string
 ) {
   const cleanText = text.trim();
   if (!cleanText) return;
@@ -82,4 +84,17 @@ export async function sendChatMessage(
     },
     { merge: true }
   );
+
+  // This creates an in-app notification for direct/private messages.
+  if (targetUserId && targetUserId !== senderId) {
+    await createFirestoreNotification({
+      userId: targetUserId,
+      title: `New message from ${senderName}`,
+      body: cleanText.length > 90 ? `${cleanText.slice(0, 90)}...` : cleanText,
+      type: 'direct-message',
+      link: '/collaboration-finder',
+      fromUserId: senderId,
+      fromUserName: senderName,
+    });
+  }
 }

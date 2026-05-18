@@ -2,14 +2,15 @@
 
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import type { StoredTask, StoredUser } from '@/lib/storage';
+import type { StoredUser } from '@/lib/storage';
+import type { FirestoreTask } from '@/lib/firestoreService';
 
 interface AddTaskModalProps {
   column: 'todo' | 'inprogress' | 'done';
   projectId: string;
   currentUserId: string;
   members: StoredUser[];
-  onAdd: (task: Omit<StoredTask, 'id' | 'createdAt'>) => void;
+  onAdd: (task: Omit<FirestoreTask, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onClose: () => void;
 }
 
@@ -43,6 +44,7 @@ export default function AddTaskModal({ column, projectId, currentUserId, members
       assigneeId: data.assigneeId,
       dueDate: data.dueDate,
       tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      createdBy: currentUserId,
     });
   };
 
