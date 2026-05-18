@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Toaster } from "sonner";
@@ -80,7 +80,7 @@ const AVATAR_COLORS = [
   "#14B8A6",
 ];
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<FirestoreUser | null>(null);
@@ -1015,5 +1015,14 @@ export default function ProfilePage() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-500">Loading profile...</div>}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }
