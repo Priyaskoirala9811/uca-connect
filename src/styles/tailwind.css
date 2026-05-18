@@ -307,3 +307,85 @@
     to { opacity: 1; transform: translateX(0); }
   }
 }
+/* Mobile workspace fixes added for UCA Connect */
+@media (max-width: 1023px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  main,
+  main > div {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden !important;
+  }
+
+  /* Project workspace: stack project list above board on phone */
+  main > div > .flex.h-full.overflow-hidden {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  /* My Projects panel */
+  main > div > .flex.h-full.overflow-hidden > div:first-child {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-shrink: 0 !important;
+    max-height: 230px !important;
+    min-height: auto !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #E8E6F0 !important;
+  }
+
+  /* Main project area */
+  main > div > .flex.h-full.overflow-hidden > div:nth-child(2) {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Project header spacing */
+  main > div > .flex.h-full.overflow-hidden > div:nth-child(2) > div.flex-shrink-0 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Keep project title/tabs inside screen */
+  main h1,
+  main p,
+  main span,
+  main button {
+    max-width: 100%;
+  }
+
+  /* Task board: one column on phone, three columns on laptop */
+  .grid.min-w-\[700px\] {
+    min-width: 0 !important;
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .kanban-col {
+    min-height: auto !important;
+    width: 100% !important;
+  }
+
+  .task-card {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .message-bubble-self,
+  .message-bubble-other {
+    max-width: 88% !important;
+    overflow-wrap: anywhere;
+  }
+}
