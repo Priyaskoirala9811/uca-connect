@@ -2,7 +2,7 @@
   "name": "ucaconnect",
   "version": "0.1.0",
   "private": true,
-  "rocketCritical": {
+  
     "dependencies": [
       "next",
       "react",

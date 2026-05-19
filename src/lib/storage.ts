@@ -1,15 +1,11 @@
-/**
- * UCA Connect - localStorage utility
- * All app data is stored here and persists across refresh and sign out/sign in.
- */
-
+/// Older local storage helpers kept for fallback data.
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface StoredUser {
   id: string;
   fullName: string;
   email: string;
-  passwordHash: string; // simple base64 for demo; not real crypto
+  passwordHash: string; //
   role: 'student' | 'tutor';
   campus: string;
   course: string;

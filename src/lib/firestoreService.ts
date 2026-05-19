@@ -1,8 +1,4 @@
-/**
- * Firestore Service — UCA Connect
- * All shared data operations: users, projects, invites, messages, library requests.
- * Auth is handled separately by firebaseAuth.ts — do NOT touch auth here.
- */
+// Firebase database functions used across the app.
 
 import { collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, Timestamp, type Unsubscribe } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
